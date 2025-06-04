@@ -1,19 +1,20 @@
 
 "use client";
 
-import React, { useRef, useState, type ChangeEvent } from "react";
+import React, { useRef, useState, type ChangeEvent, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionTitle } from "@/components/SectionTitle";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, ListMusic, Disc3 as AlbumIcon, Users, ListChecks as TapesIcon, FileAudio } from "lucide-react";
+import { UploadCloud, ListMusic, Disc3 as AlbumIcon, Users, ListChecks as TapesIcon } from "lucide-react";
 import { mockSongs, mockAlbums, mockArtists, mockTapes } from "@/data/mock";
 import Image from "next/image";
 import type { Song, Album, Artist, Tape } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 
 const SongItem = ({ song }: { song: Song }) => (
   <div className="flex items-center p-3 hover:bg-card/80 rounded-md transition-colors cursor-pointer">
-    <Image src={song.albumArtUrl} alt={song.album} width={40} height={40} className="rounded mr-4" data-ai-hint={song.dataAiHint} />
+    <Image src={song.albumArtUrl} alt={song.album} width={40} height={40} className="rounded mr-4" data-ai-hint={song.dataAiHint || 'album art'} />
     <div>
       <p className="text-sm font-medium text-foreground">{song.title}</p>
       <p className="text-xs text-muted-foreground">{song.artist} &middot; {song.album}</p>
@@ -54,7 +55,23 @@ const TapeItem = ({ tape }: { tape: Tape }) => (
 
 export default function LibraryPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importedFileNames, setImportedFileNames] = useState<string[]>([]);
+  const [importedSongs, setImportedSongs] = useState<Song[]>([]);
+  const [allDisplaySongs, setAllDisplaySongs] = useState<Song[]>(mockSongs);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    // Combine mockSongs and importedSongs whenever importedSongs changes
+    // This ensures unique songs by ID, prioritizing imported ones if IDs clash (though unlikely with current ID generation)
+    const combinedSongs = [...mockSongs];
+    const mockSongIds = new Set(mockSongs.map(s => s.id));
+    importedSongs.forEach(importedSong => {
+      if (!mockSongIds.has(importedSong.id)) {
+        combinedSongs.push(importedSong);
+      }
+    });
+    setAllDisplaySongs(combinedSongs);
+  }, [importedSongs]);
+
 
   const handleImportMusic = () => {
     fileInputRef.current?.click();
@@ -63,10 +80,29 @@ export default function LibraryPage() {
   const handleFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      const newFileNames = Array.from(files).map(file => file.name);
-      setImportedFileNames(prevNames => [...prevNames, ...newFileNames]); // Append new files
-      console.log("Selected files:", newFileNames);
-      alert(`${files.length} file(s) selected: ${newFileNames.join(', ')}. They are listed under 'Imported Files'. Full processing TBD.`);
+      const newSongs: Song[] = Array.from(files).map((file, index) => {
+        // Basic song object creation, actual metadata parsing would be more complex
+        const fileTitle = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        return {
+          id: `imported-${Date.now()}-${index}`, // Simple unique ID
+          title: fileTitle,
+          artist: "Unknown Artist",
+          album: "Imported Tracks",
+          duration: "0:00", // Placeholder
+          albumArtUrl: `https://placehold.co/60x60/333333/FFFFFF.png?text=${fileTitle.charAt(0).toUpperCase() || 'S'}`, // Generic placeholder
+          genre: "Unknown",
+          dataAiHint: "music note", // Generic hint for placeholders
+          path: file.name, // Store filename for reference
+        };
+      });
+      
+      setImportedSongs(prevSongs => [...prevSongs, ...newSongs]);
+      
+      toast({
+        title: "Files Selected",
+        description: `${files.length} file(s) selected and added to Songs tab (basic import). Actual metadata parsing and permanent storage not yet implemented.`,
+      });
+      console.log("Selected files:", Array.from(files).map(f => f.name));
     }
     // Reset the input value to allow selecting the same file(s) again if needed
     if (event.target) {
@@ -80,7 +116,7 @@ export default function LibraryPage() {
         type="file"
         ref={fileInputRef}
         style={{ display: 'none' }}
-        accept=".mp3,.ogg,.wav"
+        accept=".mp3,.ogg,.wav,.m4a,.flac" // Added more common audio types
         multiple
         onChange={handleFilesSelected}
       />
@@ -91,24 +127,6 @@ export default function LibraryPage() {
         </Button>
       </div>
 
-      {importedFileNames.length > 0 && (
-        <Card className="mb-6 retro-card">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center neon-text-accent">
-              <FileAudio className="mr-2 h-5 w-5" /> Recently Selected Files
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-              {importedFileNames.map((name, index) => (
-                <li key={index}>{name}</li>
-              ))}
-            </ul>
-            <p className="text-xs text-muted-foreground mt-3">Note: These files are selected but not yet fully processed or added to your playable library.</p>
-          </CardContent>
-        </Card>
-      )}
-
       <Tabs defaultValue="songs" className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-card mb-6">
           <TabsTrigger value="songs" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><ListMusic className="mr-1 h-4 w-4 sm:mr-2" />Songs</TabsTrigger>
@@ -118,18 +136,34 @@ export default function LibraryPage() {
         </TabsList>
         <TabsContent value="songs">
           <div className="space-y-2">
-            {mockSongs.map(song => <SongItem key={song.id} song={song} />)}
+            {allDisplaySongs.length > 0 ? (
+              allDisplaySongs.map(song => <SongItem key={song.id} song={song} />)
+            ) : (
+              <p className="text-muted-foreground text-center py-10">Your song library is empty. Import some music!</p>
+            )}
           </div>
         </TabsContent>
         <TabsContent value="albums">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {mockAlbums.map(album => <AlbumItem key={album.id} album={album} />)}
           </div>
+           {importedSongs.length > 0 && (
+             <div className="mt-6 pt-6 border-t border-border">
+                <h3 className="text-lg font-medium text-muted-foreground mb-3">Imported Albums (Placeholder)</h3>
+                <p className="text-sm text-muted-foreground">Album grouping for imported tracks coming soon.</p>
+            </div>
+           )}
         </TabsContent>
         <TabsContent value="artists">
            <div className="space-y-2">
             {mockArtists.map(artist => <ArtistItem key={artist.id} artist={artist} />)}
           </div>
+          {importedSongs.length > 0 && (
+             <div className="mt-6 pt-6 border-t border-border">
+                <h3 className="text-lg font-medium text-muted-foreground mb-3">Imported Artists (Placeholder)</h3>
+                <p className="text-sm text-muted-foreground">Artist grouping for imported tracks coming soon.</p>
+            </div>
+           )}
         </TabsContent>
         <TabsContent value="tapes">
           <div className="space-y-2">
@@ -140,3 +174,4 @@ export default function LibraryPage() {
     </div>
   );
 }
+
