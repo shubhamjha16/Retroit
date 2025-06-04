@@ -3,7 +3,7 @@
 
 import type { Song } from '@/types';
 import Image from 'next/image';
-import { Play as PlayIcon, Pause as PauseIcon, SkipForward, SkipBack, Shuffle, Repeat, Maximize2, Share2, Expand, Minimize2 } from 'lucide-react';
+import { Play as PlayIcon, Pause as PauseIcon, SkipForward, SkipBack, Shuffle, Maximize2, Share2, Expand, Minimize2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -35,7 +35,7 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
   const [progressValue, setProgressValue] = useState(0);
   const [currentTime, setCurrentTime] = useState("0:00");
   const [duration, setDuration] = useState("0:00");
-  const [isMaximized, setIsMaximized] = useState(false); // Player UI maximized state
+  const [isMaximized, setIsMaximized] = useState(false);
   const [showLoadAnimation, setShowLoadAnimation] = useState(false);
   const [prevSongIdForAnimation, setPrevSongIdForAnimation] = useState<string | null>(null);
   
@@ -45,7 +45,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isDocumentFullscreen, setIsDocumentFullscreen] = useState(false);
 
-  // Effect for browser fullscreen change detection
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsDocumentFullscreen(!!document.fullscreenElement);
@@ -56,7 +55,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     };
   }, []);
 
-  // Tape animation effect (visual only)
   useEffect(() => {
     if (song && song.id !== prevSongIdForAnimation) {
       if (prevSongIdForAnimation !== null) { 
@@ -68,13 +66,11 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     }
   }, [song, prevSongIdForAnimation]);
 
-  // Effect 1: Manage song source changes, loading new src, and initial autoplay intention
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    // Cleanup previous object URL if it exists and we are changing songs or clearing the song
-    if (currentObjectUrl && (!song || (audio.dataset && audio.dataset.currentSongId !== song?.id))) {
+    if (currentObjectUrl && (!song || (audio.dataset.currentSongId !== song?.id))) {
         URL.revokeObjectURL(currentObjectUrl);
         setCurrentObjectUrl(null);
     }
@@ -84,17 +80,13 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         let newObjectUrlToSet: string | null = null;
 
         if (song.file) {
-            if (!audio.src.startsWith('blob:') || (audio.dataset && audio.dataset.currentSongId !== song.id)) {
-                newObjectUrlToSet = URL.createObjectURL(song.file);
-                newSrcCandidate = newObjectUrlToSet;
-            } else {
-                newSrcCandidate = audio.src; 
-            }
+            newObjectUrlToSet = URL.createObjectURL(song.file);
+            newSrcCandidate = newObjectUrlToSet;
         } else if (song.path) {
             newSrcCandidate = song.path;
         }
         
-        if (audio.src !== newSrcCandidate || (audio.dataset && audio.dataset.currentSongId !== song.id)) {
+        if (audio.src !== newSrcCandidate || (audio.dataset.currentSongId !== song.id)) {
             setIsLoadingAudio(true);
             audio.src = newSrcCandidate;
             audio.dataset.currentSongId = song.id; 
@@ -109,26 +101,21 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
             setDuration("0:00");
             audio.load(); 
 
-            if (isPlaying) { // If context expects play (e.g. auto-advancing, or was playing before song change)
-                const handleCanPlayThroughForAutoplay = () => {
-                    if (audio.dataset.currentSongId === song.id && isPlaying && isLoadingAudio) { 
-                        audio.play().catch(e => {
-                            if (e.name !== 'AbortError') {
-                                console.error("Autoplay on canplaythrough failed (Effect 1):", e);
-                                setIsPlaying(false); // Reflect that play failed
-                            }
-                        });
-                    }
-                    // isLoadingAudio will be set to false by 'canplaythrough' in Effect 3
-                    audio.removeEventListener('canplaythrough', handleCanPlayThroughForAutoplay);
-                };
-                audio.addEventListener('canplaythrough', handleCanPlayThroughForAutoplay);
-            } else if (isLoadingAudio) { // If not intending to play, but we set isLoadingAudio, ensure it's cleared by 'canplaythrough'
-                 const handleCanPlayThroughToClearLoading = () => {
-                    if (audio.dataset.currentSongId === song.id && isLoadingAudio) setIsLoadingAudio(false);
-                    audio.removeEventListener('canplaythrough', handleCanPlayThroughToClearLoading);
-                };
-                audio.addEventListener('canplaythrough', handleCanPlayThroughToClearLoading);
+            const handleCanPlayThroughForAutoplay = () => {
+                if (audio.dataset.currentSongId === song.id && isPlaying) { 
+                    audio.play().catch(e => {
+                        if (e.name !== 'AbortError') {
+                            console.error("Autoplay on canplaythrough failed:", e);
+                            setIsPlaying(false); 
+                        }
+                    });
+                }
+                // isLoadingAudio will be set to false by 'canplaythrough' in the other effect
+                audio.removeEventListener('canplaythrough', handleCanPlayThroughForAutoplay);
+            };
+            
+            if (isPlaying) {
+                 audio.addEventListener('canplaythrough', handleCanPlayThroughForAutoplay);
             }
         }
     } else { 
@@ -148,10 +135,10 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         setCurrentTime("0:00");
         setDuration("0:00");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song?.id]); 
 
 
-  // Effect 2: Handle play/pause commands based on `isPlaying` from context, only if not loading
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -167,7 +154,7 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         if (playPromise !== undefined) {
           playPromise.catch(error => {
             if (error.name !== 'AbortError') {
-              console.error("Error in play() from isPlaying effect (Effect 2):", error);
+              console.error("Error in play() from isPlaying effect:", error);
               setIsPlaying(false); 
             }
           });
@@ -181,7 +168,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
   }, [isPlaying, song?.id, isLoadingAudio]);
 
 
-  // Effect 3: Audio event listeners for UI updates and context syncing
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -225,7 +211,8 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         }
     };
     const handleError = (e: Event) => {
-        console.error('Audio Error Event:', (e.target as HTMLAudioElement)?.error);
+        const error = (e.target as HTMLAudioElement)?.error;
+        console.error('Audio Error Event:', error?.message, error);
         setIsLoadingAudio(false);
         if (isPlaying) setIsPlaying(false);
         setDuration("0:00");
@@ -301,7 +288,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
   const handleToggleBrowserFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => {
-        // Silently catch error or provide a toast, console.error is also fine for dev
         console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
         toast({ title: "Fullscreen Error", description: "Could not enter fullscreen mode.", variant: "destructive"});
       });
@@ -355,7 +341,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
           </Button>
           <Button variant="ghost" size="icon"><SkipForward className="text-primary w-6 h-6 sm:w-7 sm:h-7" /></Button>
           <Button variant="ghost" size="icon" onClick={handleOpenShareDialog}><Share2 className="text-primary w-5 h-5 sm:w-6 sm:h-6" /></Button>
-          {/* Repeat button could go here too */}
         </div>
         <ShareSongDialog 
           isOpen={isShareDialogOpen} 
@@ -406,4 +391,3 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     </>
   );
 }
-
