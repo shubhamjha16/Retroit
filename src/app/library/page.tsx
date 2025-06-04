@@ -5,7 +5,7 @@ import React, { useRef, useState, type ChangeEvent, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionTitle } from "@/components/SectionTitle";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, ListMusic, Disc3 as AlbumIcon, Users, ListChecks as TapesIcon } from "lucide-react";
+import { UploadCloud, ListMusic, Disc3 as AlbumIcon, Users, ListChecks as TapesIcon, ShareNetwork } from "lucide-react";
 import { mockSongs, mockAlbums, mockArtists, mockTapes } from "@/data/mock";
 import Image from "next/image";
 import type { Song, Album, Artist, Tape } from "@/types";
@@ -14,18 +14,23 @@ import { useToast } from "@/hooks/use-toast";
 import * as jsmediatags from 'jsmediatags';
 import type { TagType } from 'jsmediatags';
 import { usePlayerContext } from "@/contexts/PlayerContext";
+import ShareSongDialog from "@/components/ShareSongDialog"; // New Import
 
-const SongItem = ({ song, onPlay }: { song: Song; onPlay: (song: Song) => void; }) => (
+const SongItem = ({ song, onPlay, onShare }: { song: Song; onPlay: (song: Song) => void; onShare: (song: Song) => void; }) => (
   <div 
-    className="flex items-center p-3 hover:bg-card/80 rounded-md transition-colors cursor-pointer"
-    onClick={() => onPlay(song)}
+    className="flex items-center p-3 hover:bg-card/80 rounded-md transition-colors group"
   >
-    <Image src={song.albumArtUrl} alt={song.album} width={40} height={40} className="rounded mr-4" data-ai-hint={song.dataAiHint || 'album art'} />
-    <div>
-      <p className="text-sm font-medium text-foreground">{song.title}</p>
-      <p className="text-xs text-muted-foreground">{song.artist} &middot; {song.album}</p>
+    <div className="flex items-center flex-grow cursor-pointer" onClick={() => onPlay(song)}>
+      <Image src={song.albumArtUrl} alt={song.album} width={40} height={40} className="rounded mr-4" data-ai-hint={song.dataAiHint || 'album art'} />
+      <div>
+        <p className="text-sm font-medium text-foreground">{song.title}</p>
+        <p className="text-xs text-muted-foreground">{song.artist} &middot; {song.album}</p>
+      </div>
     </div>
-    <span className="ml-auto text-xs text-muted-foreground">{song.duration}</span>
+    <span className="ml-auto text-xs text-muted-foreground mr-2">{song.duration}</span>
+    <Button variant="ghost" size="icon" onClick={() => onShare(song)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+      <ShareNetwork className="h-4 w-4 text-primary" />
+    </Button>
   </div>
 );
 
@@ -65,6 +70,9 @@ export default function LibraryPage() {
   const [allDisplaySongs, setAllDisplaySongs] = useState<Song[]>(mockSongs);
   const { toast } = useToast();
   const { playSong } = usePlayerContext();
+
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [selectedSongForShare, setSelectedSongForShare] = useState<Song | null>(null);
 
   useEffect(() => {
     const combinedSongs = [...mockSongs];
@@ -108,16 +116,16 @@ export default function LibraryPage() {
                 title: tags.title || file.name.substring(0, file.name.lastIndexOf('.')) || "Unknown Title",
                 artist: tags.artist || "Unknown Artist",
                 album: tags.album || "Unknown Album",
-                duration: "0:00", // Placeholder for duration, actual duration will be read by player
+                duration: "0:00", 
                 albumArtUrl: albumArtUrl,
                 genre: tags.genre || "Unknown",
                 dataAiHint: dataAiHintForArt, 
-                path: file.name, // Store original filename, not used for playback if file object exists
-                file: file, // Store the actual File object for playback
+                path: file.name, 
+                file: file, 
               };
               resolve(song);
             },
-            onError: (error: any) => { // Changed error type to any to safely access .message
+            onError: (error: any) => { 
               const errorMessage = error?.message || 'jsmediatags provided an empty or non-standard error object';
               console.error(`Error reading tags for ${file.name}: ${errorMessage}`, error);
               const fallbackTitle = file.name.substring(0, file.name.lastIndexOf('.')) || "Unknown Title";
@@ -156,13 +164,27 @@ export default function LibraryPage() {
       }
     }
     if (event.target) {
-      event.target.value = ''; // Reset file input
+      event.target.value = ''; 
     }
   };
 
   const handlePlaySong = (song: Song) => {
     playSong(song);
   };
+
+  const handleShareSong = (song: Song) => {
+    if (!song.file) {
+      toast({
+        title: "Cannot Share",
+        description: "Only imported songs with local files can be shared with this conceptual feature.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSelectedSongForShare(song);
+    setIsShareDialogOpen(true);
+  };
+
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -191,7 +213,7 @@ export default function LibraryPage() {
         <TabsContent value="songs">
           <div className="space-y-2">
             {allDisplaySongs.length > 0 ? (
-              allDisplaySongs.map(song => <SongItem key={song.id} song={song} onPlay={handlePlaySong} />)
+              allDisplaySongs.map(song => <SongItem key={song.id} song={song} onPlay={handlePlaySong} onShare={handleShareSong} />)
             ) : (
               <p className="text-muted-foreground text-center py-10">Your song library is empty. Import some music!</p>
             )}
@@ -225,6 +247,13 @@ export default function LibraryPage() {
           </div>
         </TabsContent>
       </Tabs>
+      <ShareSongDialog 
+        isOpen={isShareDialogOpen} 
+        onOpenChange={setIsShareDialogOpen}
+        song={selectedSongForShare} 
+      />
     </div>
   );
 }
+
+    
