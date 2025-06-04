@@ -1,3 +1,4 @@
+
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
@@ -17,6 +18,18 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
+  },
+  webpack: (config, { isServer }) => {
+    // For client-side bundle, provide a fallback for 'react-native-fs'.
+    // jsmediatags attempts to require it, which causes issues in web environments
+    // as 'react-native-fs' is not available or needed for browser-based file reading.
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback, // Spread existing fallbacks
+        'react-native-fs': false, // Tell Webpack to treat 'react-native-fs' as an empty module on the client
+      };
+    }
+    return config;
   },
 };
 
