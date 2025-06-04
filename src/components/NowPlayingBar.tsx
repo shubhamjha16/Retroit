@@ -36,6 +36,7 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
   const [showLoadAnimation, setShowLoadAnimation] = useState(false);
   const [prevSongId, setPrevSongId] = useState<string | null>(null);
   
+  // Tape animation effect
   useEffect(() => {
     if (song && song.id !== prevSongId) {
       if (prevSongId !== null) { 
@@ -63,40 +64,48 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         newSrc = song.path;
       }
 
-      // Define the play function to be called on 'canplay'
-      const playAudioIfIntended = () => {
-        // Check isPlaying status at the time 'canplay' fires
-        if (isPlaying && audioRef.current && audioRef.current.src === newSrc) {
-          audioRef.current.play().catch(e => console.error("Error playing on canplay:", e));
-        }
-      };
-      
-      // Only update src and listeners if the source is actually new or song becomes null
+      // Only update src if it's actually new or if the song becomes null
       if (newSrc && audio.src !== newSrc) {
         audio.src = newSrc;
+        audio.load(); 
         setProgressValue(0);
         setCurrentTime("0:00");
         setDuration("0:00");
+
+        // If context says 'isPlaying', try to play after 'canplay'
+        // This 'playOnCanPlay' should only be for the initial load of this specific newSrc
+        const playOnCanPlay = () => {
+            if (audioRef.current && audioRef.current.src === newSrc && isPlaying) {
+              audioRef.current.play().catch(e => {
+                if (e.name !== 'AbortError') { // AbortError is expected if another load/play interrupts
+                  console.error("Error playing on canplay:", e);
+                }
+              });
+            }
+          };
+        audio.addEventListener('canplay', playOnCanPlay, { once: true });
         
-        // Add 'canplay' listener before calling load, ensuring it's ready for the new source
-        audio.addEventListener('canplay', playAudioIfIntended, { once: true });
-        audio.load(); // Load the new source
-      } else if (!newSrc && audio.src) { // Song is null or has no valid path/file, but audio.src was set
+      } else if (!newSrc && audio.src) { // song is null, remove src
+        audio.pause();
         audio.removeAttribute('src');
-        audio.pause(); // Explicitly pause
-        if (isPlaying) setIsPlaying(false); // Sync context
+        if (isPlaying) setIsPlaying(false);
         setProgressValue(0);
         setCurrentTime("0:00");
         setDuration("0:00");
-      } else if (newSrc && audio.src === newSrc && isPlaying && audio.paused) {
-        // If src is the same, context wants to play, but it's paused (e.g., after a failed autoplay)
-        // This can happen if canplay fired but play was denied by browser.
-        audio.play().catch(e => console.error("Error re-playing same src:", e));
+      } else if (newSrc && audio.src === newSrc && isPlaying && audio.paused && audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+        // If src is the same, context wants to play, audio is paused and ready.
+        audio.play().catch(e => {
+           if (e.name !== 'AbortError') {
+            console.error("Error re-playing same src:", e);
+          }
+        });
       }
-    } else { // No song
-      if (audio.src) audio.removeAttribute('src');
-      audio.pause(); // Ensure it stops
-      if (isPlaying) setIsPlaying(false); // Sync context
+    } else { // No song, clear everything
+      if (audio.src) {
+          audio.pause();
+          audio.removeAttribute('src');
+      }
+      if (isPlaying) setIsPlaying(false);
       setProgressValue(0);
       setCurrentTime("0:00");
       setDuration("0:00");
@@ -106,45 +115,42 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
       if (objectUrlToRevoke) {
         URL.revokeObjectURL(objectUrlToRevoke);
       }
-      // The 'canplay' listener with { once: true } should self-remove.
-      // However, if the component unmounts or `song` changes before 'canplay' fires for the *old* newSrc,
-      // it's good practice to try and remove it, though direct removal of a dynamically created function is hard.
-      // Rely on {once: true} and the fact that a new `load()` would clear previous states.
+      // The 'canplay' listener with { once: true } self-removes.
     };
-  }, [song, audioRef, isPlaying, setIsPlaying]); // isPlaying is needed to decide if new song should autoplay via 'canplay'. setIsPlaying for syncing.
+  }, [song, audioRef]); // isPlaying is removed from deps to avoid re-running load on simple play/pause toggle. setIsPlaying is also removed.
 
-  // Effect 2: Handle explicit play/pause commands from context (when song hasn't changed significantly)
+
+  // Effect 2: Handle explicit play/pause commands from context
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !song || !audio.src) { // audio.src check ensures we don't act before src is set
-      // If trying to play without a song/src, ensure context reflects paused state.
-      if (isPlaying && (!song || !audio || !audio.src)) {
-        setIsPlaying(false);
-      }
-      return;
-    }
-
+    if (!audio || !song || !audio.src ) return; 
+    
+    // Ensure audio element is not in the middle of loading a new source if src was just changed.
+    // audio.networkState === HTMLMediaElement.NETWORK_IDLE or NETWORK_NO_SOURCE after load is complete
+    // audio.readyState >= HTMLMediaElement.HAVE_METADATA (1) is a minimum to attempt.
+    // audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA (4) is ideal.
+    
     if (isPlaying) {
-      // If the audio is paused and we intend to play (and it's not because a new song is loading via 'canplay' above)
-      if (audio.paused) {
+      if (audio.paused && audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.catch(error => {
-            console.error("Error in play() from isPlaying toggle effect:", error);
             if (error.name !== 'AbortError') {
-              // setIsPlaying(false); // Be cautious with this to avoid loops on persistent errors
+              console.error("Error in play() from isPlaying toggle effect:", error);
+               // If play fails and it's not an abort, sync context.
+               // This can happen due to browser autoplay restrictions.
+               // setIsPlaying(false); // Careful with this, can cause loops if error is persistent.
             }
           });
         }
       }
     } else {
-      // If we intend to pause and audio is not paused
       if (!audio.paused) {
         audio.pause();
       }
     }
-  }, [isPlaying, audioRef, song, setIsPlaying]); // `song` is needed to ensure operations are for the current song context.
-                                     // `setIsPlaying` for syncing back if needed.
+  }, [isPlaying, song, audioRef]); // Keep song in deps to re-evaluate play/pause if song changes AND isPlaying state is already set
+
 
   // Effect 3: Audio event listeners for UI updates and context syncing
   useEffect(() => {
@@ -155,9 +161,10 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
       if (!isPlaying) setIsPlaying(true); 
     };
     const handleAudioPause = () => {
-      // Only set isPlaying to false if it's not due to song ending and play being reset for next track (manual pause)
-      // Or if the audio paused for reasons other than `setIsPlaying(false)` call.
-      if (isPlaying) setIsPlaying(false); 
+      // Only set isPlaying to false if it's a genuine pause, not end of track that might auto-advance
+      // or a pause that's immediately followed by a play for a new track.
+      // If audio.ended is true, handleEnded will set isPlaying to false.
+      if (isPlaying && !audio.ended) setIsPlaying(false); 
     };
 
     const handleLoadedMetadata = () => {
@@ -179,7 +186,7 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         const currentMinutes = Math.floor(audioCurrentTime / 60);
         const currentSeconds = Math.floor(audioCurrentTime % 60);
         setCurrentTime(`${currentMinutes}:${currentSeconds < 10 ? '0' : ''}${currentSeconds}`);
-      } else if (audio.currentTime === 0) {
+      } else if (audio.currentTime === 0 && audio.src) {
         setProgressValue(0);
         setCurrentTime("0:00");
       }
@@ -196,10 +203,10 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
     
-    if (audio.src && audio.readyState >= HTMLMediaElement.HAVE_METADATA && duration === "0:00") {
+    if (audio.src && audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
         handleLoadedMetadata();
     }
-    if (audio.src && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && currentTime === "0:00" && progressValue === 0) {
+    if (audio.src && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
         handleTimeUpdate();
     }
 
@@ -210,17 +217,18 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [audioRef, isPlaying, setIsPlaying, duration, currentTime, progressValue]);
+  }, [audioRef, isPlaying, setIsPlaying, song]); // song dependency ensures UI updates if song data becomes available
 
 
-  const handleMainPlayPauseClick = () => {
+  const handleMainPlayPauseClick = useCallback(() => {
     if (!song) return;
+    
     const audio = audioRef.current;
     if (audio && audio.ended && !isPlaying) { 
       audio.currentTime = 0; 
     }
     togglePlayPause(); 
-  };
+  }, [song, isPlaying, togglePlayPause, audioRef]);
 
   const toggleMaximizePlayer = () => setIsMaximized(!isMaximized);
 
@@ -293,3 +301,4 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     </>
   );
 }
+
