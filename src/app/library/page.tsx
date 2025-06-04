@@ -11,6 +11,8 @@ import Image from "next/image";
 import type { Song, Album, Artist, Tape } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import * as jsmediatags from 'jsmediatags';
+import type { TagType } from 'jsmediatags';
 
 const SongItem = ({ song }: { song: Song }) => (
   <div className="flex items-center p-3 hover:bg-card/80 rounded-md transition-colors cursor-pointer">
@@ -60,8 +62,6 @@ export default function LibraryPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Combine mockSongs and importedSongs whenever importedSongs changes
-    // This ensures unique songs by ID, prioritizing imported ones if IDs clash (though unlikely with current ID generation)
     const combinedSongs = [...mockSongs];
     const mockSongIds = new Set(mockSongs.map(s => s.id));
     importedSongs.forEach(importedSong => {
@@ -77,34 +77,77 @@ export default function LibraryPage() {
     fileInputRef.current?.click();
   };
 
-  const handleFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFilesSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      const newSongs: Song[] = Array.from(files).map((file, index) => {
-        // Basic song object creation, actual metadata parsing would be more complex
-        const fileTitle = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-        return {
-          id: `imported-${Date.now()}-${index}`, // Simple unique ID
-          title: fileTitle,
-          artist: "Unknown Artist",
-          album: "Imported Tracks",
-          duration: "0:00", // Placeholder
-          albumArtUrl: `https://placehold.co/60x60/333333/FFFFFF.png?text=${fileTitle.charAt(0).toUpperCase() || 'S'}`, // Generic placeholder
-          genre: "Unknown",
-          dataAiHint: "music note", // Generic hint for placeholders
-          path: file.name, // Store filename for reference
-        };
+      const newSongsPromises = Array.from(files).map((file, index) => {
+        return new Promise<Song>((resolve) => {
+          jsmediatags.read(file, {
+            onSuccess: (tagResult: TagType) => {
+              const tags = tagResult.tags;
+              let albumArtUrl = `https://placehold.co/60x60/333333/FFFFFF.png?text=${(tags.title || file.name.substring(0, file.name.lastIndexOf('.')) || 'S').charAt(0).toUpperCase()}`;
+              let dataAiHintForArt = "music note";
+
+              if (tags.picture) {
+                const { data, format } = tags.picture;
+                let base64String = "";
+                for (let i = 0; i < data.length; i++) {
+                  base64String += String.fromCharCode(data[i]);
+                }
+                albumArtUrl = `data:${format};base64,${window.btoa(base64String)}`;
+                dataAiHintForArt = "album art";
+              }
+
+              const song: Song = {
+                id: `imported-${Date.now()}-${index}`,
+                title: tags.title || file.name.substring(0, file.name.lastIndexOf('.')) || "Unknown Title",
+                artist: tags.artist || "Unknown Artist",
+                album: tags.album || "Unknown Album",
+                duration: "0:00", // Placeholder for duration
+                albumArtUrl: albumArtUrl,
+                genre: tags.genre || "Unknown",
+                dataAiHint: dataAiHintForArt, 
+                path: file.name,
+              };
+              resolve(song);
+            },
+            onError: (error: Error) => {
+              console.error(`Error reading tags for ${file.name}:`, error);
+              const fallbackTitle = file.name.substring(0, file.name.lastIndexOf('.')) || "Unknown Title";
+              const song: Song = {
+                id: `imported-${Date.now()}-${index}`,
+                title: fallbackTitle,
+                artist: "Unknown Artist",
+                album: "Unknown Album",
+                duration: "0:00",
+                albumArtUrl: `https://placehold.co/60x60/333333/FFFFFF.png?text=${fallbackTitle.charAt(0).toUpperCase() || 'S'}`,
+                genre: "Unknown",
+                dataAiHint: "music note",
+                path: file.name,
+              };
+              resolve(song); 
+            }
+          });
+        });
       });
-      
-      setImportedSongs(prevSongs => [...prevSongs, ...newSongs]);
-      
-      toast({
-        title: "Files Selected",
-        description: `${files.length} file(s) selected and added to Songs tab (basic import). Actual metadata parsing and permanent storage not yet implemented.`,
-      });
-      console.log("Selected files:", Array.from(files).map(f => f.name));
+
+      try {
+        const newSongs = await Promise.all(newSongsPromises);
+        setImportedSongs(prevSongs => [...prevSongs, ...newSongs]);
+        toast({
+          title: "Files Processed",
+          description: `${newSongs.length} file(s) processed. Metadata extracted where available. Duration is a placeholder.`,
+        });
+        console.log("Processed songs:", newSongs);
+      } catch (err) {
+          console.error("Error processing one or more files:", err);
+          toast({
+              title: "Processing Error",
+              description: "Some files could not be processed.",
+              variant: "destructive",
+          });
+      }
     }
-    // Reset the input value to allow selecting the same file(s) again if needed
     if (event.target) {
       event.target.value = '';
     }
@@ -116,7 +159,7 @@ export default function LibraryPage() {
         type="file"
         ref={fileInputRef}
         style={{ display: 'none' }}
-        accept=".mp3,.ogg,.wav,.m4a,.flac" // Added more common audio types
+        accept=".mp3,.ogg,.wav,.m4a,.flac" 
         multiple
         onChange={handleFilesSelected}
       />
@@ -174,4 +217,3 @@ export default function LibraryPage() {
     </div>
   );
 }
-
