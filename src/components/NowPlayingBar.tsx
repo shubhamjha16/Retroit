@@ -3,13 +3,15 @@
 
 import type { Song } from '@/types';
 import Image from 'next/image';
-import { Play as PlayIcon, Pause as PauseIcon, SkipForward, SkipBack, Shuffle, Repeat, Maximize2 } from 'lucide-react';
+import { Play as PlayIcon, Pause as PauseIcon, SkipForward, SkipBack, Shuffle, Repeat, Maximize2, Share2, Expand, Minimize2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { TapeLoadAnimation } from './TapeLoadAnimation';
 import { usePlayerContext } from '@/contexts/PlayerContext';
+import ShareSongDialog from '@/components/ShareSongDialog';
+import { useToast } from '@/hooks/use-toast';
 
 interface NowPlayingBarProps {
   song: Song;
@@ -28,16 +30,31 @@ const SpinningReel = ({ className }: { className?: string }) => (
 export default function NowPlayingBar({ song }: NowPlayingBarProps) {
   const { isPlaying, setIsPlaying, togglePlayPause } = usePlayerContext();
   const audioRef = useRef<HTMLAudioElement>(null);
+  const { toast } = useToast();
   
   const [progressValue, setProgressValue] = useState(0);
   const [currentTime, setCurrentTime] = useState("0:00");
   const [duration, setDuration] = useState("0:00");
-  const [isMaximized, setIsMaximized] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false); // Player UI maximized state
   const [showLoadAnimation, setShowLoadAnimation] = useState(false);
   const [prevSongIdForAnimation, setPrevSongIdForAnimation] = useState<string | null>(null);
   
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [currentObjectUrl, setCurrentObjectUrl] = useState<string | null>(null);
+
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [isDocumentFullscreen, setIsDocumentFullscreen] = useState(false);
+
+  // Effect for browser fullscreen change detection
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsDocumentFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   // Tape animation effect (visual only)
   useEffect(() => {
@@ -67,18 +84,16 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         let newObjectUrlToSet: string | null = null;
 
         if (song.file) {
-            // Only create a new object URL if the song ID has changed or if the current src is not a blob URL (e.g., path-based)
             if (!audio.src.startsWith('blob:') || (audio.dataset && audio.dataset.currentSongId !== song.id)) {
                 newObjectUrlToSet = URL.createObjectURL(song.file);
                 newSrcCandidate = newObjectUrlToSet;
             } else {
-                newSrcCandidate = audio.src; // Assume current blob URL is still valid for the same song file
+                newSrcCandidate = audio.src; 
             }
         } else if (song.path) {
             newSrcCandidate = song.path;
         }
         
-        // Only update src and load if the source or song ID has actually changed
         if (audio.src !== newSrcCandidate || (audio.dataset && audio.dataset.currentSongId !== song.id)) {
             setIsLoadingAudio(true);
             audio.src = newSrcCandidate;
@@ -86,7 +101,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
             if (newObjectUrlToSet) {
                 setCurrentObjectUrl(newObjectUrlToSet);
             } else if (song.path && currentObjectUrl) { 
-                // If we switched from a file to a path, and an object URL was set, clear it.
                 setCurrentObjectUrl(null); 
             }
 
@@ -95,26 +109,32 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
             setDuration("0:00");
             audio.load(); 
 
-            // If context expects play, set up listener for 'canplaythrough' to autoplay
-            if (isPlaying) {
+            if (isPlaying) { // If context expects play (e.g. auto-advancing, or was playing before song change)
                 const handleCanPlayThroughForAutoplay = () => {
-                    if (audio.dataset.currentSongId === song.id && isPlaying) { 
+                    if (audio.dataset.currentSongId === song.id && isPlaying && isLoadingAudio) { 
                         audio.play().catch(e => {
                             if (e.name !== 'AbortError') {
                                 console.error("Autoplay on canplaythrough failed (Effect 1):", e);
-                                setIsPlaying(false); 
+                                setIsPlaying(false); // Reflect that play failed
                             }
                         });
                     }
+                    // isLoadingAudio will be set to false by 'canplaythrough' in Effect 3
                     audio.removeEventListener('canplaythrough', handleCanPlayThroughForAutoplay);
                 };
                 audio.addEventListener('canplaythrough', handleCanPlayThroughForAutoplay);
+            } else if (isLoadingAudio) { // If not intending to play, but we set isLoadingAudio, ensure it's cleared by 'canplaythrough'
+                 const handleCanPlayThroughToClearLoading = () => {
+                    if (audio.dataset.currentSongId === song.id && isLoadingAudio) setIsLoadingAudio(false);
+                    audio.removeEventListener('canplaythrough', handleCanPlayThroughToClearLoading);
+                };
+                audio.addEventListener('canplaythrough', handleCanPlayThroughToClearLoading);
             }
         }
-    } else { // No song is selected
+    } else { 
         if (audio.src) {
             audio.pause();
-            if (audio.src.startsWith('blob:') && currentObjectUrl) { // Ensure we only revoke URLs we created
+            if (audio.src.startsWith('blob:') && currentObjectUrl) { 
                  URL.revokeObjectURL(currentObjectUrl);
             }
             audio.removeAttribute('src');
@@ -128,24 +148,19 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         setCurrentTime("0:00");
         setDuration("0:00");
     }
-  }, [song?.id]); // Primary dependency is song.id. isPlaying is handled internally for autoplay.
+  }, [song?.id]); 
 
 
   // Effect 2: Handle play/pause commands based on `isPlaying` from context, only if not loading
   useEffect(() => {
     const audio = audioRef.current;
-
-    if (!audio) { 
-      return;
-    }
+    if (!audio) return;
 
     const currentAudioSongId = audio.dataset ? audio.dataset.currentSongId : undefined;
-    // If no song, or loading, or src not set, or song ID mismatch, this effect shouldn't try to play/pause.
     if (!song || isLoadingAudio || !audio.src || currentAudioSongId !== song.id) {
         return;
     }
     
-    // Main logic for this effect: respond to isPlaying changes for an ALREADY LOADED song.
     if (isPlaying) {
       if (audio.paused && audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
         const playPromise = audio.play();
@@ -163,7 +178,7 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         audio.pause();
       }
     }
-  }, [isPlaying, song?.id, isLoadingAudio, setIsPlaying]); // Removed audioRef from dependencies
+  }, [isPlaying, song?.id, isLoadingAudio]);
 
 
   // Effect 3: Audio event listeners for UI updates and context syncing
@@ -172,11 +187,9 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     if (!audio) return;
 
     const handleAudioPlay = () => {
-      // Sync context if audio starts playing (e.g. via autoplay or external control)
       if (!isPlaying && audio.dataset.currentSongId === song?.id) setIsPlaying(true); 
     };
     const handleAudioPause = () => {
-      // Sync context if audio pauses (unless it's due to song ending or loading new song)
       if (isPlaying && !audio.ended && !isLoadingAudio && audio.dataset.currentSongId === song?.id) setIsPlaying(false); 
     };
     const handleLoadedMetadata = () => {
@@ -198,7 +211,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         const currentSeconds = Math.floor(audioCurrentTime % 60);
         setCurrentTime(`${currentMinutes}:${currentSeconds < 10 ? '0' : ''}${currentSeconds}`);
       } else if (audio.currentTime === 0 && audio.src) { 
-        // Reset time if currentTime is 0 (e.g. after load or skip)
         setProgressValue(0);
         setCurrentTime("0:00");
       }
@@ -206,12 +218,10 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     const handleEnded = () => {
       if (isPlaying) setIsPlaying(false); 
       setProgressValue(100); 
-      // Future: Add logic for next song in playlist
     };
     const handleCanPlayThrough = () => {
-        if (audio.dataset.currentSongId === song?.id) { // Ensure this applies to the current song
+        if (audio.dataset.currentSongId === song?.id) { 
             setIsLoadingAudio(false);
-            // Autoplay logic is now primarily handled in Effect 1's 'canplaythrough' listener
         }
     };
     const handleError = (e: Event) => {
@@ -231,7 +241,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     audio.addEventListener('canplaythrough', handleCanPlayThrough);
     audio.addEventListener('error', handleError);
     
-    // Initial UI sync if audio is already in a certain state
     if (audio.src && audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
         handleLoadedMetadata();
     }
@@ -239,7 +248,6 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
         handleTimeUpdate();
     }
     if(audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA && isLoadingAudio && audio.dataset.currentSongId === song?.id){
-        // If it's already ready and we thought it was loading, correct it.
         setIsLoadingAudio(false);
     }
 
@@ -252,15 +260,12 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
       audio.removeEventListener('canplaythrough', handleCanPlayThrough);
       audio.removeEventListener('error', handleError);
     };
-  }, [song?.id, isPlaying, isLoadingAudio, setIsPlaying]); // Dependencies refined
+  }, [song?.id, isPlaying, isLoadingAudio, setIsPlaying]); 
 
-  // Cleanup currentObjectUrl when component unmounts OR when currentObjectUrl itself changes.
-  // This effect should only run when currentObjectUrl changes or component unmounts.
   useEffect(() => {
     return () => {
         if (currentObjectUrl) {
             URL.revokeObjectURL(currentObjectUrl);
-            // setCurrentObjectUrl(null); // Not strictly necessary to set state here as component is unmounting
         }
     };
   }, [currentObjectUrl]);
@@ -270,15 +275,43 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     if (!song) return;
     
     const audio = audioRef.current;
-    if (audio && audio.ended && !isPlaying) { // If song ended and user clicks play
-      audio.currentTime = 0; // Rewind
+    if (audio && audio.ended && !isPlaying) { 
+      audio.currentTime = 0; 
       setProgressValue(0);
       setCurrentTime("0:00");
     }
-    togglePlayPause(); // Let context and effects handle the actual play/pause
-  }, [song, isPlaying, togglePlayPause]); // audioRef not needed as dependency
+    togglePlayPause(); 
+  }, [song, isPlaying, togglePlayPause]);
 
-  const toggleMaximizePlayer = () => setIsMaximized(!isMaximized);
+  const togglePlayerView = () => setIsMaximized(!isMaximized);
+
+  const handleOpenShareDialog = () => {
+    if (!song) return;
+    if (!song.file) {
+      toast({
+        title: "Cannot Share This Song",
+        description: "Only locally imported songs with local files can be shared with this conceptual feature.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsShareDialogOpen(true);
+  };
+
+  const handleToggleBrowserFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        // Silently catch error or provide a toast, console.error is also fine for dev
+        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+        toast({ title: "Fullscreen Error", description: "Could not enter fullscreen mode.", variant: "destructive"});
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
 
   if (!song) return null;
 
@@ -286,9 +319,14 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     return (
       <div className="fixed inset-0 bg-background z-[100] p-4 flex flex-col items-center justify-center text-foreground">
         {showLoadAnimation && <TapeLoadAnimation />}
-        <Button variant="ghost" size="icon" onClick={toggleMaximizePlayer} className="absolute top-4 right-4 text-primary hover:text-primary/80">
-          <Maximize2 className="rotate-180" />
-        </Button>
+        <div className="absolute top-4 right-4 flex items-center space-x-2">
+            <Button variant="ghost" size="icon" onClick={handleToggleBrowserFullscreen} className="text-primary hover:text-primary/80">
+                {isDocumentFullscreen ? <Minimize2 /> : <Expand />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={togglePlayerView} className="text-primary hover:text-primary/80">
+                <Maximize2 className="rotate-180" />
+            </Button>
+        </div>
         <Image src={song.albumArtUrl} alt={song.album} width={300} height={300} className="rounded-lg shadow-2xl shadow-primary/30 mb-8" data-ai-hint={song.dataAiHint || 'album cover'} />
         <h2 className="text-3xl font-headline neon-text-primary mb-2 text-center">{song.title}</h2>
         <p className="text-xl text-muted-foreground mb-6 text-center">{song.artist}</p>
@@ -309,15 +347,21 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-center space-x-2 sm:space-x-4 my-4 w-full max-w-md">
+        <div className="flex items-center justify-center space-x-1 sm:space-x-2 my-4 w-full max-w-md">
           <Button variant="ghost" size="icon"><Shuffle className="text-primary w-5 h-5 sm:w-6 sm:h-6" /></Button>
           <Button variant="ghost" size="icon"><SkipBack className="text-primary w-6 h-6 sm:w-7 sm:h-7" /></Button>
           <Button variant="primary" size="lg" onClick={handleMainPlayPauseClick} className="rounded-full w-16 h-16 sm:w-20 sm:h-20" disabled={isLoadingAudio}>
             {isPlaying && !isLoadingAudio ? <PauseIcon size={32} /> : <PlayIcon size={32} />}
           </Button>
           <Button variant="ghost" size="icon"><SkipForward className="text-primary w-6 h-6 sm:w-7 sm:h-7" /></Button>
-          <Button variant="ghost" size="icon"><Repeat className="text-primary w-5 h-5 sm:w-6 sm:h-6" /></Button>
+          <Button variant="ghost" size="icon" onClick={handleOpenShareDialog}><Share2 className="text-primary w-5 h-5 sm:w-6 sm:h-6" /></Button>
+          {/* Repeat button could go here too */}
         </div>
+        <ShareSongDialog 
+          isOpen={isShareDialogOpen} 
+          onOpenChange={setIsShareDialogOpen}
+          song={song} 
+        />
       </div>
     );
   }
@@ -336,18 +380,29 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
           </div>
           <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 ml-2">
             <Button variant="ghost" size="icon" onClick={handleMainPlayPauseClick} className="text-primary hover:text-primary/80" disabled={isLoadingAudio}>
-              {isPlaying && !isLoadingAudio ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
+              {isPlaying && !isLoadingAudio ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
             </Button>
             <Button variant="ghost" size="icon" className="text-primary hover:text-primary/80 hidden sm:inline-flex">
               <SkipForward className="w-5 h-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={toggleMaximizePlayer} className="text-muted-foreground hover:text-foreground">
+             <Button variant="ghost" size="icon" onClick={handleOpenShareDialog} className="text-primary hover:text-primary/80">
+              <Share2 className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={togglePlayerView} className="text-muted-foreground hover:text-foreground">
                <Maximize2 className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleToggleBrowserFullscreen} className="text-muted-foreground hover:text-foreground">
+              {isDocumentFullscreen ? <Minimize2 className="w-5 h-5" /> : <Expand className="w-5 h-5" />}
             </Button>
           </div>
         </div>
         <Progress value={progressValue} className="w-full h-1 bg-input absolute bottom-0 left-0 right-0 rounded-none [&>div]:bg-primary" />
       </div>
+      <ShareSongDialog 
+        isOpen={isShareDialogOpen} 
+        onOpenChange={setIsShareDialogOpen}
+        song={song} 
+      />
     </>
   );
 }
