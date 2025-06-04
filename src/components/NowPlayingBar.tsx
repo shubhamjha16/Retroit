@@ -12,7 +12,7 @@ import { TapeLoadAnimation } from './TapeLoadAnimation';
 import { usePlayerContext } from '@/contexts/PlayerContext';
 
 interface NowPlayingBarProps {
-  song: Song; // Song is now guaranteed by AppShell
+  song: Song;
 }
 
 const SpinningReel = ({ className }: { className?: string }) => (
@@ -28,18 +28,18 @@ const SpinningReel = ({ className }: { className?: string }) => (
 export default function NowPlayingBar({ song }: NowPlayingBarProps) {
   const { isPlaying, setIsPlaying, togglePlayPause } = usePlayerContext();
   const audioRef = useRef<HTMLAudioElement>(null);
+  
   const [progressValue, setProgressValue] = useState(0);
   const [currentTime, setCurrentTime] = useState("0:00");
   const [duration, setDuration] = useState("0:00");
   const [isMaximized, setIsMaximized] = useState(false);
   const [showLoadAnimation, setShowLoadAnimation] = useState(false);
   const [prevSongId, setPrevSongId] = useState<string | null>(null);
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
-
+  
+  // Effect for showing tape load animation on song change
   useEffect(() => {
-    // Song change effect
     if (song && song.id !== prevSongId) {
-      if (prevSongId !== null) {
+      if (prevSongId !== null) { // Only show animation if it's not the very first song
         setShowLoadAnimation(true);
         const animationTimer = setTimeout(() => setShowLoadAnimation(false), 1500);
         return () => clearTimeout(animationTimer);
@@ -48,129 +48,144 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     }
   }, [song, prevSongId]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !song) return;
-
-    // Clean up previous object URL
-    if (objectUrl) {
-      URL.revokeObjectURL(objectUrl);
-      setObjectUrl(null); // Important to set to null so it can be re-created
-    }
-    
-    let newObjectUrlCreated: string | null = null;
-    if (song.file) {
-      newObjectUrlCreated = URL.createObjectURL(song.file);
-      setObjectUrl(newObjectUrlCreated);
-      audio.src = newObjectUrlCreated;
-    } else if (song.path) {
-      audio.src = song.path; 
-    } else {
-      return; 
-    }
-    
-    setProgressValue(0);
-    setCurrentTime("0:00");
-    setDuration("0:00");
-
-    if (isPlaying) {
-      audio.play().catch(e => console.error("Error playing audio:", e));
-    } else {
-      audio.pause();
-    }
-    
-    return () => {
-      // Cleanup Object URL when component unmounts or song changes
-      // This check is important because objectUrl state might not update immediately
-      // before this cleanup runs from a rapid song change.
-      if (newObjectUrlCreated) { 
-        URL.revokeObjectURL(newObjectUrlCreated);
-      } else if (objectUrl) { // Fallback to state if new one wasn't made in this run
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [song, isPlaying]); // isPlaying is needed here to correctly start/pause when song is set from elsewhere
-
+  // Effect for loading song, setting src, and managing object URL
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
+    let currentObjectUrl: string | null = null;
+
+    if (song) {
+      if (song.file) {
+        currentObjectUrl = URL.createObjectURL(song.file);
+        audio.src = currentObjectUrl;
+      } else if (song.path) {
+        audio.src = song.path;
+      } else {
+        audio.removeAttribute('src');
+        return; // No playable source
+      }
+      
+      audio.load(); // Load the new source
+      setProgressValue(0);
+      setCurrentTime("0:00");
+      setDuration("0:00");
+      // Autoplay if isPlaying is already true from context (e.g. new song selected while playing)
+      // The actual audio.play() will be handled by the isPlaying effect.
+    } else {
+      audio.removeAttribute('src');
+      setProgressValue(0);
+      setCurrentTime("0:00");
+      setDuration("0:00");
+    }
+
+    return () => {
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+    };
+  }, [song, audioRef]); // Only re-run when the song object itself changes
+
+  // Effect for controlling play/pause based on `isPlaying` from context
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !song) return; // No audio element or no song to act upon
+
+    if (isPlaying) {
+      if (audio.src || audio.currentSrc) { // Ensure src is set before playing
+         audio.play().catch(e => console.error("Error in play() from isPlaying effect:", e));
+      }
+    } else {
+      audio.pause();
+    }
+  }, [isPlaying, song, audioRef]); // Re-run if isPlaying, song, or audioRef changes
+
+  // Effect for audio event listeners
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleAudioPlay = () => {
+      if (!isPlaying) setIsPlaying(true); // Sync context if audio plays (e.g. from autoplay attribute)
+    };
+    const handleAudioPause = () => {
+      if (isPlaying) setIsPlaying(false); // Sync context if audio pauses (e.g. ended, or external pause)
+    };
 
     const handleLoadedMetadata = () => {
-      const currentAudio = audioRef.current;
-      if (!currentAudio || !isFinite(currentAudio.duration) || currentAudio.duration === 0) {
+      if (audio.duration && Number.isFinite(audio.duration)) {
+        const audioDuration = audio.duration;
+        const minutes = Math.floor(audioDuration / 60);
+        const seconds = Math.floor(audioDuration % 60);
+        setDuration(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
+      } else {
         setDuration("0:00");
-        return;
       }
-      const audioDuration = currentAudio.duration;
-      const minutes = Math.floor(audioDuration / 60);
-      const seconds = Math.floor(audioDuration % 60);
-      setDuration(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
     };
 
     const handleTimeUpdate = () => {
-      const currentAudio = audioRef.current;
-       if (!currentAudio || !isFinite(currentAudio.currentTime) || !isFinite(currentAudio.duration) || currentAudio.duration === 0) {
+      if (audio.currentTime && audio.duration && Number.isFinite(audio.currentTime) && Number.isFinite(audio.duration) && audio.duration > 0) {
+        const audioCurrentTime = audio.currentTime;
+        const audioDuration = audio.duration;
+        setProgressValue((audioCurrentTime / audioDuration) * 100);
+        const currentMinutes = Math.floor(audioCurrentTime / 60);
+        const currentSeconds = Math.floor(audioCurrentTime % 60);
+        setCurrentTime(`${currentMinutes}:${currentSeconds < 10 ? '0' : ''}${currentSeconds}`);
+      } else if (audio.currentTime === 0) {
         setProgressValue(0);
         setCurrentTime("0:00");
-        return;
       }
-      const audioCurrentTime = currentAudio.currentTime;
-      const audioDuration = currentAudio.duration;
-      setProgressValue((audioCurrentTime / audioDuration) * 100);
-      const minutes = Math.floor(audioCurrentTime / 60);
-      const seconds = Math.floor(audioCurrentTime % 60);
-      setCurrentTime(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
     };
-
+    
     const handleEnded = () => {
-      setIsPlaying(false);
-      setProgressValue(100);
-      // TODO: Implement next song logic
+      setIsPlaying(false); // Update context: song has ended
+      // Optionally, reset progress or move to next song here
+      setProgressValue(100); 
+      // setCurrentTime(duration); // Or keep it at the end
     };
 
-    audio.addEventListener('play', handlePlay);
-    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('play', handleAudioPlay);
+    audio.addEventListener('pause', handleAudioPause);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
-    // It's also good to explicitly load metadata if src changes and element is not playing
-    if(audio.src && audio.paused){
-        audio.load(); // This can help trigger loadedmetadata sooner if needed
+    
+    // If audio source is set and metadata hasn't loaded (e.g. duration is "0:00"),
+    // and audio is ready enough, manually trigger metadata update.
+    // This can help if loadedmetadata event was missed or delayed.
+    if (audio.src && audio.readyState >= HTMLMediaElement.HAVE_METADATA && duration === "0:00") {
+        handleLoadedMetadata();
+    }
+    if (audio.src && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && currentTime === "0:00" && progressValue === 0) {
+        handleTimeUpdate();
     }
 
 
     return () => {
-      audio.removeEventListener('play', handlePlay);
-      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('play', handleAudioPlay);
+      audio.removeEventListener('pause', handleAudioPause);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [song, setIsPlaying]); // Key change: Depend on `song` to re-attach listeners
-  
-  const handleMainPlayPauseClick = () => {
-    togglePlayPause(); // This comes from context and updates `isPlaying`
-    const audio = audioRef.current;
-    if (!audio) return;
+  }, [audioRef, song, isPlaying, setIsPlaying, duration, currentTime, progressValue]); // Dependencies for event listeners
 
-    // The actual play/pause logic is now primarily handled by the useEffect reacting to `isPlaying` and `song`
-    // However, direct interaction might still be needed for responsiveness or edge cases like re-playing an ended song.
-    if (audio.paused && !isPlaying) { // If context says "play" (isPlaying will flip to true after togglePlayPause)
-        audio.play().catch(e => console.error("Error playing audio:", e));
-    } else if (!audio.paused && isPlaying) { // If context says "pause" (isPlaying will flip to false)
-        audio.pause();
-    } else if (audio.paused && progressValue >= 100) { // If song ended and user hits play
-        audio.currentTime = 0;
-        setProgressValue(0);
-        audio.play().catch(e => console.error("Error playing audio:", e));
-        if (!isPlaying) setIsPlaying(true); 
+
+  const handleMainPlayPauseClick = () => {
+    if (!song) return;
+    
+    const audio = audioRef.current;
+    // If song has ended and user clicks play, restart it.
+    if (audio && audio.ended && !isPlaying) { 
+      audio.currentTime = 0; 
+      // togglePlayPause will set isPlaying to true, triggering the effect to play
     }
+    togglePlayPause(); // This will update isPlaying in context, and the effect will handle play/pause
   };
 
   const toggleMaximizePlayer = () => setIsMaximized(!isMaximized);
+
+  if (!song) return null; // Don't render player if no song
 
   if (isMaximized) {
     return (
@@ -239,4 +254,3 @@ export default function NowPlayingBar({ song }: NowPlayingBarProps) {
     </>
   );
 }
-
