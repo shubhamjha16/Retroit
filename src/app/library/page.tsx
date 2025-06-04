@@ -1,6 +1,7 @@
 
 "use client";
 
+import React, { useRef, type ChangeEvent } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionTitle } from "@/components/SectionTitle";
 import { Button } from "@/components/ui/button";
@@ -51,13 +52,35 @@ const TapeItem = ({ tape }: { tape: Tape }) => (
 
 
 export default function LibraryPage() {
-  // TODO: Implement actual file import logic
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleImportMusic = () => {
-    alert("Music import functionality to be implemented. This would open a file dialog to select MP3, OGG, or WAV files.");
+    fileInputRef.current?.click();
+  };
+
+  const handleFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const fileNames = Array.from(files).map(file => file.name);
+      console.log("Selected files:", fileNames);
+      alert(`${files.length} file(s) selected: ${fileNames.join(', ')}. Check console for more details. Full import & processing TBD.`);
+    }
+    // Reset the input value to allow selecting the same file(s) again if needed
+    if (event.target) {
+      event.target.value = '';
+    }
   };
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        accept=".mp3,.ogg,.wav"
+        multiple
+        onChange={handleFilesSelected}
+      />
       <div className="flex justify-between items-center mb-6">
         <SectionTitle className="mb-0">My Library</SectionTitle>
         <Button variant="primary" onClick={handleImportMusic}>
