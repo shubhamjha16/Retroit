@@ -5,7 +5,7 @@ import React, { useRef, useState, type ChangeEvent, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionTitle } from "@/components/SectionTitle";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, ListMusic, Disc3 as AlbumIcon, Users, ListChecks as TapesIcon, ShareNetwork } from "lucide-react";
+import { UploadCloud, ListMusic, Disc3 as AlbumIcon, Users, ListChecks as TapesIcon, Share2 } from "lucide-react";
 import { mockSongs, mockAlbums, mockArtists, mockTapes } from "@/data/mock";
 import Image from "next/image";
 import type { Song, Album, Artist, Tape } from "@/types";
@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import * as jsmediatags from 'jsmediatags';
 import type { TagType } from 'jsmediatags';
 import { usePlayerContext } from "@/contexts/PlayerContext";
-import ShareSongDialog from "@/components/ShareSongDialog"; // New Import
+import ShareSongDialog from "@/components/ShareSongDialog";
 
 const SongItem = ({ song, onPlay, onShare }: { song: Song; onPlay: (song: Song) => void; onShare: (song: Song) => void; }) => (
   <div 
@@ -29,7 +29,7 @@ const SongItem = ({ song, onPlay, onShare }: { song: Song; onPlay: (song: Song) 
     </div>
     <span className="ml-auto text-xs text-muted-foreground mr-2">{song.duration}</span>
     <Button variant="ghost" size="icon" onClick={() => onShare(song)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-      <ShareNetwork className="h-4 w-4 text-primary" />
+      <Share2 className="h-4 w-4 text-primary" />
     </Button>
   </div>
 );
@@ -255,5 +255,3 @@ export default function LibraryPage() {
     </div>
   );
 }
-
-    
