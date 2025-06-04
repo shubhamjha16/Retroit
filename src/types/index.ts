@@ -9,6 +9,7 @@ export interface Song {
   genre?: string;
   bpm?: number;
   path?: string; // Path to local file
+  dataAiHint?: string; // For placeholder image generation
 }
 
 export interface Album {
@@ -18,6 +19,7 @@ export interface Album {
   albumArtUrl: string;
   year?: number;
   songs: Song[];
+  dataAiHint?: string; 
 }
 
 export interface Artist {
@@ -26,15 +28,17 @@ export interface Artist {
   imageUrl?: string;
   albums: Album[];
   songs: Song[];
+  dataAiHint?: string;
 }
 
 export interface Tape { // Playlist
   id: string;
   name: string;
   coverStyleUrl: string; // URL to a cassette/VHS style image
-  songs: Song[];
+  songs: Song[]; // Could be array of song IDs or Song objects
   description?: string;
   userEditable?: boolean; // If user created this tape
+  dataAiHint?: string;
 }
 
 export interface Mood {
@@ -42,4 +46,5 @@ export interface Mood {
   name: string;
   imageUrl: string;
   description?: string;
+  dataAiHint?: string;
 }
