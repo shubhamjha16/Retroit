@@ -1,14 +1,15 @@
 
 "use client";
 
-import React, { useRef, type ChangeEvent } from "react";
+import React, { useRef, useState, type ChangeEvent } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionTitle } from "@/components/SectionTitle";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, ListMusic, Disc3 as AlbumIcon, Users, ListChecks as TapesIcon } from "lucide-react";
+import { UploadCloud, ListMusic, Disc3 as AlbumIcon, Users, ListChecks as TapesIcon, FileAudio } from "lucide-react";
 import { mockSongs, mockAlbums, mockArtists, mockTapes } from "@/data/mock";
 import Image from "next/image";
 import type { Song, Album, Artist, Tape } from "@/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const SongItem = ({ song }: { song: Song }) => (
   <div className="flex items-center p-3 hover:bg-card/80 rounded-md transition-colors cursor-pointer">
@@ -53,6 +54,7 @@ const TapeItem = ({ tape }: { tape: Tape }) => (
 
 export default function LibraryPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importedFileNames, setImportedFileNames] = useState<string[]>([]);
 
   const handleImportMusic = () => {
     fileInputRef.current?.click();
@@ -61,9 +63,10 @@ export default function LibraryPage() {
   const handleFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      const fileNames = Array.from(files).map(file => file.name);
-      console.log("Selected files:", fileNames);
-      alert(`${files.length} file(s) selected: ${fileNames.join(', ')}. Check console for more details. Full import & processing TBD.`);
+      const newFileNames = Array.from(files).map(file => file.name);
+      setImportedFileNames(prevNames => [...prevNames, ...newFileNames]); // Append new files
+      console.log("Selected files:", newFileNames);
+      alert(`${files.length} file(s) selected: ${newFileNames.join(', ')}. They are listed under 'Imported Files'. Full processing TBD.`);
     }
     // Reset the input value to allow selecting the same file(s) again if needed
     if (event.target) {
@@ -87,6 +90,24 @@ export default function LibraryPage() {
           <UploadCloud className="mr-2 h-4 w-4" /> Import Music
         </Button>
       </div>
+
+      {importedFileNames.length > 0 && (
+        <Card className="mb-6 retro-card">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center neon-text-accent">
+              <FileAudio className="mr-2 h-5 w-5" /> Recently Selected Files
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+              {importedFileNames.map((name, index) => (
+                <li key={index}>{name}</li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground mt-3">Note: These files are selected but not yet fully processed or added to your playable library.</p>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="songs" className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-card mb-6">
