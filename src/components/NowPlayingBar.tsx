@@ -7,6 +7,7 @@ import { Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Volume2, Maximize2
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import React, { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils'; // Added import
 
 interface NowPlayingBarProps {
   song: Song;
