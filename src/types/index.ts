@@ -8,8 +8,9 @@ export interface Song {
   albumArtUrl: string;
   genre?: string;
   bpm?: number;
-  path?: string; // Path to local file
+  path?: string; // Path to local file or URL
   dataAiHint?: string; // For placeholder image generation
+  file?: File; // Actual file object for imported songs
 }
 
 export interface Album {
@@ -19,11 +20,11 @@ export interface Album {
   albumArtUrl: string;
   year?: number;
   songs: Song[];
-  dataAiHint?: string; 
+  dataAiHint?: string;
 }
 
 export interface Artist {
-  id: string;
+  id:string;
   name: string;
   imageUrl?: string;
   albums: Album[];

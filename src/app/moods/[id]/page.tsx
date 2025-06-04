@@ -10,6 +10,7 @@ import { Play, Shuffle, ArrowLeft } from 'lucide-react';
 import { SectionTitle } from '@/components/SectionTitle';
 import { Card, CardContent } from '@/components/ui/card';
 import Link from 'next/link';
+import { usePlayerContext } from '@/contexts/PlayerContext';
 
 const SongItem = ({ song, onPlay }: { song: Song; onPlay: (song: Song) => void }) => (
   <div 
@@ -29,17 +30,17 @@ export default function MoodDetailPage() {
   const params = useParams();
   const router = useRouter();
   const moodId = params.id as string;
+  const { playSong } = usePlayerContext();
 
   const mood = mockMoods.find(m => m.id === moodId);
 
-  // Mock: Filter songs based on mood. In a real app, this logic would be more sophisticated.
-  // For now, just show a subset of songs or randomly pick some.
+  // Mock: Filter songs based on mood.
   const moodSongs = mockSongs.filter((_, index) => {
     if (mood?.name.toLowerCase().includes("chill")) return index % 3 === 0;
     if (mood?.name.toLowerCase().includes("arcade")) return index % 3 === 1;
     if (mood?.name.toLowerCase().includes("energy")) return index % 3 === 2;
-    return true; // fallback
-  }).slice(0, 10); // Limit to 10 songs for example
+    return true; 
+  }).slice(0, 10); 
 
   if (!mood) {
     return (
@@ -51,9 +52,8 @@ export default function MoodDetailPage() {
     );
   }
   
-  const handlePlaySong = (song: Song) => {
-    alert(`Playing: ${song.title} by ${song.artist}`);
-    // Example: updateCurrentlyPlaying(song);
+  const handlePlaySong = (songToPlay: Song) => {
+    playSong(songToPlay);
   };
 
   return (
@@ -65,8 +65,8 @@ export default function MoodDetailPage() {
         <Image 
           src={mood.imageUrl} 
           alt={mood.name} 
-          layout="fill" 
-          objectFit="cover" 
+          fill // Changed from layout="fill" objectFit="cover"
+          style={{objectFit: "cover"}}
           className="opacity-70"
           data-ai-hint={mood.dataAiHint}
         />
@@ -102,4 +102,3 @@ export default function MoodDetailPage() {
     </div>
   );
 }
-

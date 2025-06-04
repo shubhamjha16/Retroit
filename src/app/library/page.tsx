@@ -13,9 +13,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import * as jsmediatags from 'jsmediatags';
 import type { TagType } from 'jsmediatags';
+import { usePlayerContext } from "@/contexts/PlayerContext";
 
-const SongItem = ({ song }: { song: Song }) => (
-  <div className="flex items-center p-3 hover:bg-card/80 rounded-md transition-colors cursor-pointer">
+const SongItem = ({ song, onPlay }: { song: Song; onPlay: (song: Song) => void; }) => (
+  <div 
+    className="flex items-center p-3 hover:bg-card/80 rounded-md transition-colors cursor-pointer"
+    onClick={() => onPlay(song)}
+  >
     <Image src={song.albumArtUrl} alt={song.album} width={40} height={40} className="rounded mr-4" data-ai-hint={song.dataAiHint || 'album art'} />
     <div>
       <p className="text-sm font-medium text-foreground">{song.title}</p>
@@ -60,6 +64,7 @@ export default function LibraryPage() {
   const [importedSongs, setImportedSongs] = useState<Song[]>([]);
   const [allDisplaySongs, setAllDisplaySongs] = useState<Song[]>(mockSongs);
   const { toast } = useToast();
+  const { playSong } = usePlayerContext();
 
   useEffect(() => {
     const combinedSongs = [...mockSongs];
@@ -103,11 +108,12 @@ export default function LibraryPage() {
                 title: tags.title || file.name.substring(0, file.name.lastIndexOf('.')) || "Unknown Title",
                 artist: tags.artist || "Unknown Artist",
                 album: tags.album || "Unknown Album",
-                duration: "0:00", // Placeholder for duration
+                duration: "0:00", // Placeholder for duration, actual duration will be read by player
                 albumArtUrl: albumArtUrl,
                 genre: tags.genre || "Unknown",
                 dataAiHint: dataAiHintForArt, 
-                path: file.name,
+                path: file.name, // Store original filename, not used for playback if file object exists
+                file: file, // Store the actual File object for playback
               };
               resolve(song);
             },
@@ -124,6 +130,7 @@ export default function LibraryPage() {
                 genre: "Unknown",
                 dataAiHint: "music note",
                 path: file.name,
+                file: file,
               };
               resolve(song); 
             }
@@ -136,9 +143,8 @@ export default function LibraryPage() {
         setImportedSongs(prevSongs => [...prevSongs, ...newSongs]);
         toast({
           title: "Files Processed",
-          description: `${newSongs.length} file(s) processed. Metadata extracted where available. Duration is a placeholder.`,
+          description: `${newSongs.length} file(s) processed. Click to play!`,
         });
-        console.log("Processed songs:", newSongs);
       } catch (err) {
           console.error("Error processing one or more files:", err);
           toast({
@@ -149,8 +155,12 @@ export default function LibraryPage() {
       }
     }
     if (event.target) {
-      event.target.value = '';
+      event.target.value = ''; // Reset file input
     }
+  };
+
+  const handlePlaySong = (song: Song) => {
+    playSong(song);
   };
 
   return (
@@ -159,7 +169,7 @@ export default function LibraryPage() {
         type="file"
         ref={fileInputRef}
         style={{ display: 'none' }}
-        accept=".mp3,.ogg,.wav,.m4a,.flac" 
+        accept=".mp3,.ogg,.wav,.m4a,.flac,audio/*" 
         multiple
         onChange={handleFilesSelected}
       />
@@ -180,7 +190,7 @@ export default function LibraryPage() {
         <TabsContent value="songs">
           <div className="space-y-2">
             {allDisplaySongs.length > 0 ? (
-              allDisplaySongs.map(song => <SongItem key={song.id} song={song} />)
+              allDisplaySongs.map(song => <SongItem key={song.id} song={song} onPlay={handlePlaySong} />)
             ) : (
               <p className="text-muted-foreground text-center py-10">Your song library is empty. Import some music!</p>
             )}

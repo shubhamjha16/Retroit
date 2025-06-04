@@ -1,14 +1,16 @@
 
 "use client";
 
-import { useParams } from 'next/navigation';
-import { mockTapes, mockSongs } from '@/data/mock'; // Assuming mockSongs contains all songs
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { mockTapes, mockSongs } from '@/data/mock'; 
 import type { Song, Tape } from '@/types';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Play, Shuffle, Edit3, Share2, Trash2 } from 'lucide-react';
+import { Play, Shuffle, Edit3, Share2, Trash2, ArrowLeft } from 'lucide-react';
 import { SectionTitle } from '@/components/SectionTitle';
 import { Card, CardContent } from '@/components/ui/card';
+import { usePlayerContext } from '@/contexts/PlayerContext';
 
 const SongItem = ({ song, onPlay }: { song: Song; onPlay: (song: Song) => void }) => (
   <div 
@@ -26,9 +28,10 @@ const SongItem = ({ song, onPlay }: { song: Song; onPlay: (song: Song) => void }
 
 export default function TapeDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const tapeId = params.id as string;
+  const { playSong } = usePlayerContext();
 
-  // In a real app, you'd fetch this data. Using mockTapes for now.
   const tape = mockTapes.find(t => t.id === tapeId);
 
   if (!tape) {
@@ -36,26 +39,31 @@ export default function TapeDetailPage() {
       <div className="container mx-auto px-4 py-8 text-center">
         <SectionTitle>Tape Not Found</SectionTitle>
         <p className="text-muted-foreground">The requested tape could not be found. It might have been deleted or never existed.</p>
-        <Link href="/tapes" legacyBehavior><Button variant="link" className="mt-4">Back to Tapes</Button></Link>
+        <Link href="/tapes" legacyBehavior><Button variant="link" className="mt-4"><ArrowLeft className="mr-2 h-4 w-4"/>Back to Tapes</Button></Link>
       </div>
     );
   }
   
-  const handlePlaySong = (song: Song) => {
-    // Logic to start playing the song
-    // This would typically update a global state for the NowPlayingBar
-    alert(`Playing: ${song.title} by ${song.artist}`);
-    // Example: updateCurrentlyPlaying(song);
+  const handlePlaySong = (songToPlay: Song) => {
+    playSong(songToPlay);
   };
+
+  const tapeSongs: Song[] = tape.songs.map(songIdOrSong => 
+    typeof songIdOrSong === 'string' ? mockSongs.find(s => s.id === songIdOrSong) : songIdOrSong
+  ).filter((s): s is Song => s !== undefined);
+
 
   return (
     <div className="container mx-auto px-4 py-8">
+       <Button variant="ghost" onClick={() => router.back()} className="mb-4 text-muted-foreground hover:text-primary">
+        <ArrowLeft className="mr-2 h-4 w-4"/> Back
+      </Button>
       <div className="relative mb-8 h-64 rounded-lg overflow-hidden shadow-xl shadow-primary/20">
         <Image 
           src={tape.coverStyleUrl} 
           alt={tape.name} 
-          layout="fill" 
-          objectFit="cover" 
+          fill // Changed from layout="fill" objectFit="cover"
+          style={{objectFit: "cover"}}
           className="opacity-70"
           data-ai-hint={tape.dataAiHint}
         />
@@ -64,16 +72,16 @@ export default function TapeDetailPage() {
           <p className="text-sm font-bold uppercase tracking-widest text-primary neon-text-primary">Tape</p>
           <h1 className="font-headline text-4xl lg:text-5xl text-foreground mt-1">{tape.name}</h1>
           {tape.description && <p className="text-muted-foreground mt-2 max-w-lg">{tape.description}</p>}
-          <p className="text-xs text-muted-foreground mt-1">{tape.songs.length} songs</p>
+          <p className="text-xs text-muted-foreground mt-1">{tapeSongs.length} songs</p>
         </div>
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div className="flex items-center space-x-3">
-          <Button size="lg" variant="primary" onClick={() => handlePlaySong(tape.songs[0])}>
+          <Button size="lg" variant="primary" onClick={() => tapeSongs.length > 0 && handlePlaySong(tapeSongs[0])} disabled={tapeSongs.length === 0}>
             <Play className="mr-2 h-5 w-5" /> Play
           </Button>
-          <Button size="lg" variant="outline" className="border-accent text-accent hover:bg-accent/10 hover:text-accent">
+          <Button size="lg" variant="outline" className="border-accent text-accent hover:bg-accent/10 hover:text-accent" disabled={tapeSongs.length === 0}>
             <Shuffle className="mr-2 h-5 w-5" /> Shuffle
           </Button>
         </div>
@@ -88,17 +96,11 @@ export default function TapeDetailPage() {
 
       <Card className="retro-card bg-card/80">
         <CardContent className="p-2 sm:p-4">
-          {tape.songs.length > 0 ? (
+          {tapeSongs.length > 0 ? (
             <div className="space-y-1">
-              {tape.songs.map((songIdOrSong, index) => {
-                // Assuming tape.songs might contain song IDs or full song objects.
-                // For this mock, let's find the song from mockSongs if it's an ID.
-                // If it's already a song object, use it directly.
-                // This is a simplification; a real app would have proper data structures.
-                const song = typeof songIdOrSong === 'string' ? mockSongs.find(s => s.id === songIdOrSong) : songIdOrSong;
-                if (!song) return null;
-                return <SongItem key={song.id || index} song={song} onPlay={handlePlaySong} />;
-              })}
+              {tapeSongs.map((song, index) => (
+                <SongItem key={song.id || index} song={song} onPlay={handlePlaySong} />
+              ))}
             </div>
           ) : (
             <p className="text-muted-foreground text-center py-10">This tape is empty. Add some songs!</p>

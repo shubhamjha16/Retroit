@@ -1,12 +1,14 @@
 
 import type { Song, Album, Artist, Tape, Mood } from '@/types';
 
+// Note: For mockSongs to be playable, actual audio files would need to be placed
+// in the /public/audio directory matching these paths.
 export const mockSongs: Song[] = [
-  { id: 's1', title: 'Retrograde Motion', artist: 'Synthwave Rider', album: 'Neon Nights', duration: '4:12', albumArtUrl: 'https://placehold.co/300x300/BF40BF/39FF14.png?text=NN', genre: 'Synthwave', bpm: 120, dataAiHint: 'synthwave album' },
-  { id: 's2', title: 'Pixel Dreams', artist: '8-Bit Hero', album: 'Digital Escape', duration: '3:30', albumArtUrl: 'https://placehold.co/300x300/39FF14/BF40BF.png?text=DE', genre: 'Chiptune', bpm: 140, dataAiHint: 'chiptune pixel' },
-  { id: 's3', title: 'Cassette Love', artist: 'Analog Heart', album: 'Mixtape Memories', duration: '2:55', albumArtUrl: 'https://placehold.co/300x300/222222/39FF14.png?text=MM', genre: 'Lo-fi', bpm: 85, dataAiHint: 'lofi cassette' },
-  { id: 's4', title: 'Midnight Drive', artist: 'Synthwave Rider', album: 'Neon Nights', duration: '5:01', albumArtUrl: 'https://placehold.co/300x300/BF40BF/39FF14.png?text=NN', genre: 'Synthwave', bpm: 110, dataAiHint: 'night drive' },
-  { id: 's5', title: 'VHS Romance', artist: 'Analog Heart', album: 'Mixtape Memories', duration: '3:15', albumArtUrl: 'https://placehold.co/300x300/222222/39FF14.png?text=MM', genre: 'Lo-fi', bpm: 90, dataAiHint: 'vhs tape' },
+  { id: 's1', title: 'Retrograde Motion', artist: 'Synthwave Rider', album: 'Neon Nights', duration: '4:12', albumArtUrl: 'https://placehold.co/300x300/BF40BF/39FF14.png?text=NN', genre: 'Synthwave', bpm: 120, dataAiHint: 'synthwave album', path: '/audio/s1_retrograde_motion.mp3' },
+  { id: 's2', title: 'Pixel Dreams', artist: '8-Bit Hero', album: 'Digital Escape', duration: '3:30', albumArtUrl: 'https://placehold.co/300x300/39FF14/BF40BF.png?text=DE', genre: 'Chiptune', bpm: 140, dataAiHint: 'chiptune pixel', path: '/audio/s2_pixel_dreams.mp3' },
+  { id: 's3', title: 'Cassette Love', artist: 'Analog Heart', album: 'Mixtape Memories', duration: '2:55', albumArtUrl: 'https://placehold.co/300x300/222222/39FF14.png?text=MM', genre: 'Lo-fi', bpm: 85, dataAiHint: 'lofi cassette', path: '/audio/s3_cassette_love.mp3' },
+  { id: 's4', title: 'Midnight Drive', artist: 'Synthwave Rider', album: 'Neon Nights', duration: '5:01', albumArtUrl: 'https://placehold.co/300x300/BF40BF/39FF14.png?text=NN', genre: 'Synthwave', bpm: 110, dataAiHint: 'night drive', path: '/audio/s4_midnight_drive.mp3' },
+  { id: 's5', title: 'VHS Romance', artist: 'Analog Heart', album: 'Mixtape Memories', duration: '3:15', albumArtUrl: 'https://placehold.co/300x300/222222/39FF14.png?text=MM', genre: 'Lo-fi', bpm: 90, dataAiHint: 'vhs tape', path: '/audio/s5_vhs_romance.mp3' },
 ];
 
 export const mockAlbums: Album[] = [
@@ -35,7 +37,7 @@ export const mockMoods: Mood[] = [
 
 // For AI recommendations
 export const listeningHistoryExample: string = "Retrograde Motion,Pixel Dreams";
-export const songMetadataExample: string = 
+export const songMetadataExample: string =
   "Retrograde Motion:Synthwave:Synthwave Rider:120," +
   "Pixel Dreams:Chiptune:8-Bit Hero:140," +
   "Cassette Love:Lo-fi:Analog Heart:85," +
@@ -46,4 +48,4 @@ export const songMetadataExample: string =
   "Game Over:Chiptune:8-Bit Hero:150," +
   "Sunset Cruise:Synthwave:Sunset Driver:100";
 
-export const currentlyPlayingMock: Song | null = mockSongs[0];
+export const currentlyPlayingMock: Song | null = null; // Initialize with no song playing
