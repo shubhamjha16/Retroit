@@ -1,6 +1,6 @@
 # Retroit
 
-A Next.js music player application with a retro theme, focusing on offline mixtapes, moods, and AI-powered song recommendations.
+A Next.js music player application with a retro theme, focusing on offline mixtapes, moods, and AI-powered song recommendations, along with P2P File Sharing for direct browser to browser sharing of music files in mp3 and other formats
 
 ## Features
 
