@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
     // as 'react-native-fs' is not available or needed for browser-based file reading.
     if (!isServer) {
       config.resolve.fallback = {
-        ...config.resolve.fallback, // Spread existing fallbacks
+        ...(config.resolve.fallback || {}), // Ensure fallback object exists
         'react-native-fs': false, // Tell Webpack to treat 'react-native-fs' as an empty module on the client
       };
     }
