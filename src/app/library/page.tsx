@@ -117,8 +117,9 @@ export default function LibraryPage() {
               };
               resolve(song);
             },
-            onError: (error: Error) => {
-              console.error(`Error reading tags for ${file.name}:`, error);
+            onError: (error: any) => { // Changed error type to any to safely access .message
+              const errorMessage = error?.message || 'jsmediatags provided an empty or non-standard error object';
+              console.error(`Error reading tags for ${file.name}: ${errorMessage}`, error);
               const fallbackTitle = file.name.substring(0, file.name.lastIndexOf('.')) || "Unknown Title";
               const song: Song = {
                 id: `imported-${Date.now()}-${index}`,
