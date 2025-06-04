@@ -4,7 +4,7 @@ A Next.js music player application with a retro theme, focusing on offline mixta
 
 ## Features
 
-- **Music Playback:** Enjoy your music library with a focus on "tapes" (playlists) and "moods", with spotify inspired User Interface.
+- **Music Playback:** Enjoy your music library with a focus on "tapes" (playlists) and "moods", with **Spotify** inspired User Interface.
 - **AI Song Recommendations:** Discover new tracks with the "For You" section, powered by AI.
 - **Library Browsing and Search:** Easily find and play your favorite songs, artists, albums, and tapes.
 - **Retro-themed UI:** A visually nostalgic interface.
